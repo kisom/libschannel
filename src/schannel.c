@@ -46,9 +46,10 @@
  */
 struct schan_message {
 	uint8_t		version;
+	uint8_t		mtype;
+	uint16_t	pad;
 	uint32_t	seqno;
 	uint32_t	payload_length;
-	uint8_t		mtype;
 	uint8_t		payload[SCHANNEL_BUFSIZE];
 };
 
@@ -499,7 +500,7 @@ schannel_listen(struct schannel *sch, int sock, uint8_t *signer,
 /* This defines the current message format version. */
 #define SCHANNEL_CURRENT_VERSION		1
 /* This defines the size of the message structure sans payload. */
-#define SCHANNEL_MESSAGE_OVERHEAD		66
+#define SCHANNEL_MESSAGE_OVERHEAD		12
 
 
 /*
@@ -526,6 +527,7 @@ _schannel_send(struct schannel *sch, uint8_t mtype, uint8_t *buf, size_t buflen)
 	memcpy(m.payload, buf, buflen);
 	m.payload_length = htonl((uint32_t)buflen);
 	m.mtype = mtype;
+	m.pad = 0;
 	m.seqno = htonl(sch->sctr);
 	m.version = SCHANNEL_CURRENT_VERSION;
 
@@ -589,6 +591,10 @@ unpack_message(struct schannel *sch, struct schan_message *m, uint32_t mlen)
 	    mlen, sch->buf, sch->rkey);
 	sodium_memzero(sch->buf, mlen);
 	if (-1 == rv) {
+		return false;
+	}
+
+	if (0 != m->pad) {
 		return false;
 	}
 

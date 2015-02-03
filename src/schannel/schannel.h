@@ -38,14 +38,14 @@ bool	schannel_init(void);
 
 /* SCHANNEL_OVERHEAD defines the amount of overhead for an encrypted message. */
 #define SCHANNEL_OVERHEAD	(crypto_secretbox_NONCEBYTES+\
-				 crypto_secretbox_MACBYTES+66)
+				 crypto_secretbox_MACBYTES+12)
 /* SCHANNEL_IDKEYSIZE defines the size of an identity public key. */
 #define SCHANNEL_IDKEYSIZE	crypto_sign_PUBLICKEYBYTES
 /* SCHANNEL_IDPKEYSIZE defines the size of an identity private key. */
 #define SCHANNEL_IDPKEYSIZE	crypto_sign_SECRETKEYBYTES
 
 /* SCHANNEL_KEYSIZE defines the size of a shared encryption key. */
-#define SCHANNEL_KEYSIZE	crypto_box_BEFORENMBYTES
+#define SCHANNEL_KEYSIZE		crypto_box_BEFORENMBYTES
 
 /*
  * The following define the constants used for the different message
