@@ -854,13 +854,13 @@ client as its receive key and by the server as its send key.
 
 @section Sending and Receiving Messages
 
-A message is sent over the secure channel by wrapping it in a message
-structure containing additonal information; this structure is detailed
-in the Data Structures chapter. This wrapped message is then encrypted
-for tranmsission. The message's length as a 32-bit unsigned integer in
-network order is transmitted first, followed by the ciphertext; the
-receiver will perform sanity checks on this number to make sure that
-the length is appropriate and that the proper amount of data is received.
+A message is sent over the secure channel by wrapping it in a
+message structure containing additional information (@pxref{Data
+Structures}). This wrapped message is then encrypted for tranmsission. The
+message's length as a 32-bit unsigned integer in network order is
+transmitted first, followed by the ciphertext; the receiver will perform
+sanity checks on this number to make sure that the length is appropriate
+and that the proper amount of data is received.
 
 If the message is a normal message, the receiver will copy the payload
 into the appropriate buffer. If the message is a shutdown message, the
@@ -968,19 +968,27 @@ messages for transmission and receiving. It is defined as
 @pindex struct schan_message
 @verbatim
 struct schan_message {
+	uint8_t		version;
+	uint8_t		mtype;
+	uint16_t	pad;
 	uint32_t	seqno;
 	uint32_t	payload_length;
-	uint8_t		mtype;
 	uint8_t		payload[SCHANNEL_BUFSIZE];
 };
 @end verbatim
 
-The @code{seqno} field contains the current message sequence number.
-
-The @code{payload_length} field contains the length of the payload.
+The @code{version} field contains the message format number; this is
+current at version 1.
 
 The @code{mtype} field is a flag indicating the type of message; the
 message type is returned by @code{schannel_recv}.
+
+The @code{pad} field contains two bytes of padding; this should always
+be 0.
+
+The @code{seqno} field contains the current message sequence number.
+
+The @code{payload_length} field contains the length of the payload.
 
 @itemize
 
@@ -1257,7 +1265,7 @@ traffic. It is currently defined as 1.
 @code{SCHANNEL_OVERHEAD}: this defines the amount of extra data added
 to a message after encryption; this is the size of the nonce, the
 size of the message authentication code, and the size of the message
-envelope. The current overhead is 106 bytes.
+envelope. The current overhead is 50 bytes.
 
 @pindex SCHANNEL_SHUTDOWN
 @item
