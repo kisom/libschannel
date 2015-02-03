@@ -1,0 +1,155 @@
+.Dd February 2, 2015
+.Dt schannel_dial 3
+.Os
+.Sh NAME
+.Nm schannel_dial
+.Nd establish a new secure channel with a peer
+.Sh SYNOPSIS
+.In schannel/schannel.h
+.Ft bool
+.Fo schannel_dial
+.Fa "struct schannel *sch"
+.Fa "int sockfd"
+.Fa "uint8_t *signer"
+.Fa "size_t signerlen"
+.Fa "uint8_t *peer"
+.Fa "size_t peerlen"
+.Fc
+Link with
+.Ic -lsodium -lschannel .
+.Sh DESCRIPTION
+.Nm
+initiates the key exchange with a peer, signing and verifying the key
+exchange as required. The other side should call
+.Xr schannel_listen 3
+to complete the key exchange. The
+.Ic struct schannel
+will have its send and receive keys locked using
+.Xr mlock 3 ;
+messages may be sent and received using
+.Xr schannel_send 3
+and
+.Xr schannel_recv 3 .
+.Pp
+.Sy NOTE :
+once this function has successfully set up a secure channel, the
+secure channel should always be zeroised before discarding. The
+reasons for this are elucidated in the documentation for
+.Xr schannel_zero 3 .
+.Sh AUTHENTICATION
+If the
+.Ic signer
+argument is non-NULL, its length is expected to be SCHAN_IDPKEYSIZE
+bytes and contain an Ed25519 private key. In this case, the function
+will sign the key exchange. Otherwise, the length argument should be
+0. Both of these length invariants are checked at the start of the
+function, and failing to uphold these invariants will cause the function
+to fail.
+.Pp
+If the
+.Ic peer
+argument is non-NULL, its length is expected to be SCHAN_IDKEYSIZE bytes
+and contain an Ed25519 public key. In this case, the function will verify
+the signature on the key exchange. Otherwise, the length argument should
+be 0. Both of these length invariants are checked at the start of the
+function, and failing to uphold these invariants will cause the function
+to fail.
+.Sh RETURN VALUES
+.Nm
+returns true if the channel was properly established, and false on
+failure. On failure, the secure channel may not be used for secure
+communications; all sensitive memory areas will be unlocked.
+.Sh EXAMPLES
+.Bd -literal
+int
+sender(const char *host, uint16_t port)
+{
+	struct schannel		 sch;
+	struct sockaddr_in	 sin;
+	size_t			 peerlen;
+	size_t			 signerlen;
+	int			 sockfd;
+	int			 rv = -1;
+	uint8_t			*peer = NULL;
+	uint8_t			*signer = NULL;
+
+	if (-1 == load_identity(peer, &peerlen, signer, &signerlen)) {
+		return -1;
+	}
+
+	memset(sin.sin_zero, '\0', sizeof sin.sin_zero);
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port);
+	if (-1 == inet_aton(host, &sin.sin_addr)) {
+		return -1;
+	}
+
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (-1 == sockfd) {
+		return -1;
+	}
+
+	if (-1 == connect(sockfd, (struct sockaddr *)&sin,
+		    (socklen_t)(sizeof sin))) {
+		return -1;
+	}
+
+	if (!schannel_dial(&sch, sockfd, signer, signerlen, peer, peerlen)) {
+		return -1;
+	}
+
+	/*
+	 * Send/receive and process messages.
+	 */
+	rv = conversation(&sch);
+	schannel_zero(&sch);
+	return rv;
+}
+.Ed
+.Sh ERRORS
+.Nm
+can fail if
+.Bl -bullet -width .Ds
+.It
+The
+.Ic sch
+argument is NULL
+.It
+The socket is invalid
+.It
+The length invariants are not met
+.It
+Memory for the private key or shared keys cannot be locked
+.It
+A new set of key exchange keys could not be generated
+.It
+The key exchange could not be signed
+.It
+The key exchange could not be sent over the socket
+.It
+The peer's key exchange could not be read from the socket
+.It
+The signature on the peer's key exchange could not be verified
+.It
+The key exchange computation failed
+.El
+.Sh SEE ALSO
+.Xr libschannel 3 ,
+.Xr schannel_close 3 ,
+.Xr schannel_init 3 ,
+.Xr schannel_listen 3 ,
+.Xr schannel_recv 3 ,
+.Xr schannel_rekey 3 ,
+.Xr schannel_send 3 ,
+.Xr schannel_zero 3
+.Sh STANDARDS
+.Nm
+is written in C99, and follows the NASA 10 guidelines for more reliable
+programs.
+.Sh AUTHORS
+.Nm
+was written by
+.An Kyle Isom Aq Mt kyle@tyrfingr.is .
+.Sh CAVEATS
+.Sh BUGS
+Please report all bugs to the author.

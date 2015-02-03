@@ -1,0 +1,1279 @@
+\input texinfo   @c -*-texinfo-*-
+@comment $Id: GNU-Sample-Texts.html,v 1.7 2008/09/19 15:44:59 karl Exp $
+@comment %**start of header
+@setfilename libschannel.info
+@include version.texi
+@settitle libschannel @value{VERSION}
+@syncodeindex pg cp
+@comment %**end of header
+@copying
+This manual is for libschannel, a library for establishing a secure channel
+over TCP/IP.
+
+Copyright @copyright{} 2013 Kyle Isom <@email{kyle@@tyrfingr.is}>
+
+@quotation
+This document is released into the public domain.
+@end quotation
+@end copying
+
+@dircategory Texinfo documentation system
+@direntry
+* introduction: (intro)Introduction to libschannel
+@end direntry
+
+@titlepage
+@title libschannel
+@subtitle for version @value{VERSION}, @value{UPDATED}
+@author Kyle Isom (@email{kyle@@tyrfingr.is})
+@page
+@vskip 0pt plus 1filll
+@paragraphindent 0
+@insertcopying
+@end titlepage
+
+@contents
+
+@ifnottex
+@node Top
+@top libschannel
+
+This manual is for libschannel (version @value{VERSION}, @value{UPDATED}).
+@end ifnottex
+
+@menu
+* A Quick Introduction::
+* Building and Installation::
+* Code Style Guide::
+* The schannel Protocol::
+* Data Structures::
+* Function Reference::
+* schannel Tools::
+* Defines::
+* Manual Copyright::
+* Index::
+@end menu
+
+@paragraphindent 0
+
+@node A Quick Introduction
+@chapter A Quick Introduction
+
+@cindex introduction
+@cindex secure channel
+
+@strong{libschannel} is a library for establishing bidirectional
+secure channels over TCP/IP. A secure channel has the following
+properties:
+
+@itemize
+
+@item
+A bi-directional channel has separate keys for each direction. 
+
+@item
+Send and receive counters to prevent replayed messages; these message
+counters will be reset whenever the keys change.
+
+@item
+A regressed message counter is considered a decryption failure.
+
+@item
+The channel transmits discrete messages, and doesn't operate as a
+stream.
+
+@item
+New keys are generated for each channel.
+
+@item
+An eavesdropper can still perform traffic analysis to note when and
+how often the two sides communicate, and will be able to observe the
+size of the messages.
+
+@end itemize
+
+A session is considered one conversation between two peers.
+@strong{libschannel} calls these sessions @samp{schannel}s. An
+@verb{|schannel|} is set up using a Curve25519 key exchange using a
+pair of public keys, one for each direction of the conversation.
+
+The initiating peer, denoted here as the @dfn{client}, will @dfn{dial}
+another peer, denoted here as the @dfn{server}. The server will
+@dfn{listen} on an existing TCP session, allowing the host program
+to select an appropriate means of concurrency. Note that a
+@code{struct schannel} is not reentrant, and most only be used by one
+thread.
+
+The conversation, from the client's perspective, looks like the
+following:
+
+@cindex conversation, client perspective
+@enumerate
+
+@item
+The calling program sets up a TCP connection to the server.
+
+@pindex schannel_dial
+@item
+The @code{schannel_dial} function is used to initiate a secure channel
+and perform the key exchange.
+
+@pindex schannel_send
+@item
+The @code{schannel_send} function is used to send some data. This
+function will encrypt and authenticate the data before it is sent.
+
+@pindex schannel_recv
+@item
+The @code{schannel_recv} function is used to receive some data. This
+function will authenticate and decrypt the data, and ensure that the
+message counter has not regressed.
+
+@pindex schannel_rekey
+@item
+If the send or receive data counters are above a certain threshold value,
+one side may initiate a key rotation using the @code{schannel_rekey}
+function.
+
+@pindex SCHANNEL_SHUTDOWN
+@pindex schannel_zero
+@item
+If the received message has the type SCHANNEL_SHUTDOWN, the server
+calls @code{schannel_zero}. This will properly zeroise the channel
+and closes the socket.
+
+@item
+Steps 3-6 are repeated as often as necessary.
+
+@pindex schannel_close
+@item
+The @code{schannel_close} function is used to end the session and
+disconnect.
+
+@end enumerate
+
+From the server's perspective, the conversation proceeds as follows:
+
+@cindex conversation, server perspective
+@enumerate
+
+@item
+The calling program sets up a TCP listener.
+
+@pindex schannel_listen
+@item
+The @code{schannel_listen} function is used to initiate a secure channel
+and perform the key exchange.
+
+@pindex schannel_recv
+@item
+The @code{schannel_recv} function is used to receive some data. This
+function will authenticate and decrypt the data, and ensure that the
+message counter has not regressed.
+
+@pindex schannel_send
+@item
+The @code{schannel_send} function is used to send some data. This
+function will encrypt and authenticate the data before it is sent.
+
+@pindex schannel_rekey
+@item
+If the send or receive data counters are above a certain threshold value,
+one side may initiate a key rotation using the @code{schannel_rekey}
+function.
+
+@pindex SCHANNEL_SHUTDOWN
+@pindex schannel_zero
+@item
+If the received message has the type SCHANNEL_SHUTDOWN, the server
+calls @code{schannel_zero}. This will properly zeroise the channel
+and closes the socket.
+
+@item
+Steps 3-6 are repeated as often as necessary.
+
+@pindex schannel_close
+@item
+The @code{schannel_close} function is used to end the session and
+disconnect.
+
+@end enumerate
+
+@section Authentication
+
+@cindex authentication
+@cindex Ed25519
+@cindex identity key
+
+The key exchanges are authenticated using Ed25519 @dfn{identity keys}.
+There are four authentication scenarios:
+
+@enumerate
+
+@cindex authentication, none
+@item
+@emph{No authentication}. In this scenario, neither side signs or
+verifies the signatures on the key exchange. This method is
+@strong{insecure}; a man-in-the-middle (@dfn{MitM}) can proxy the key
+exchange, decrypting messages and re-encrypting them so neither side
+is the wiser.
+
+@cindex authentication, server
+@item
+@emph{Server authentication}. In this scenario, the server signs its key
+exchange, and the client verifies this signature. This requires that
+the client know the server's public identity key ahead of time. This
+scenario assumes that a number of unknown clients use the server to
+access some resource. These clients want to verify that their connection
+has not been MitM'd, but MitM'd client connections are not a concern to
+the server.
+
+@cindex authentication, client
+@item
+@emph{Client authentication}. In this scenario, the client signs its key
+exchange, and the server verifies this signature. This requires that
+the server know the client's public identity key ahead of time. This
+scenario assumes that a number of trusted clients use the server to
+access some resource. These server wants to verify that the connection
+has not been MitM'd, but MitM'd server connections are not a concern
+to the client.
+
+@cindex authentication, mutual
+@item
+@emph{Mutual authentication}. In this scenario, both sides sign and
+verify the key exchange. This requires both sides know the other
+side's identity key ahead of time. This should be used when both sides
+need to ensure the connection has not been MitM'd.
+
+@end enumerate
+
+@cindex key distribution
+The authentication scenario must account for the requirement to distribute
+identity keys.
+
+@node Building and Installation
+@chapter Building and Installation
+
+This program uses @code{autoconf} and @code{automake} as its build
+system. The provided @code{autobuild.sh} script will call all the
+necessary automake tools to build the software. Otherwise, the standard
+
+@example
+./configure && make
+sudo make install
+@end example
+
+dance will build and install this library once the @code{configure}
+script is generated.
+
+The libsodium library, available from
+@url{https://github.com/jedisct1/libsodium}, must be installed to build
+the tools, and must be linked into programs that use this library.
+
+@node Code Style Guide
+@chapter Code Style Guide
+
+The code style guide is provided here as it illuminates the guiding
+principles of this program. It may be summarised as a combination of
+minor modifications to the OpenBSD @verb{|style(9)|} guidelines with
+the NASA guidelines for reliable code.
+
+@section NASA's Guidelines for Reliable Code
+@noindent
+The NASA rules are:
+
+@enumerate
+
+@item
+Restrict all code to very simple flow control constructs. Do not use
+goto statements, setjmp, or longjmp constructs, or direct or indirect
+recursion.
+
+@item
+All loops must have a fixed upper bound. It must be trivially possible
+for a checking tool to statically prove that a preset upper bound on
+the number of iterations of a loop cannot be exceeded. If the
+loop-bound cannot be proven statically, the rule is considered
+violated.
+
+@item
+Do not use dynamic memory allocation after initialisation.
+
+@item
+No function should be longer than what can be printed on a single
+sheet of paper (in a reasonable fixed-width font with a size of 10
+with one line per statement and one line per declaration). Typically,
+this means no more than about 60 lines per function.
+
+@item
+The assertion density of the code should average a minimum of two
+assertions per function. Assertions must always be side effect-free
+and should be defined as Boolean tests.
+
+@item
+Data objects must be declared at the smallest possible level of scope.
+
+@item
+Each calling function must check non-void function return values, and
+the validity of parameters must be checked inside each function.
+
+@item
+Preprocessor use must be limited to the inclusion of header files and
+simple macro definitions. Token pasting, variable argument lists
+(ellipses), and recursive macro calls are not allowed.
+
+@item
+The use of pointers should be restricted. Specifically, no more than
+one level of dereferencing is allowed. Pointer dereference operations
+may not be hidden in macro definitions or inside typedef declarations.
+Function pointers are not permitted.
+
+@item
+All code most be compiled, from the first day of development, with all
+compiler warnings enable at the compiler's most pedantic setting. All
+code must compile with these settings without any warnings. All code
+must be checked daily with at least one---but preferably more than
+one---state-of-the-art static source code analyzer, and should pass
+the analyses with zero warnings.
+
+@end enumerate
+
+The static code analyzers that are used are clang's analyzer and rats;
+and valgrind is used on the tools to verify that no memory leakage occurs.
+
+@page
+@section Code Style
+
+The following is a slight modification to the OpenBSD KNF. The tweaks are
+
+@enumerate
+
+@item
+Only ANSI-style function declarations are used.
+
+@item
+In variable declarations, tabs are placed after the type, not the
+first word.
+
+@item
+Braces are required for all conditional statements.
+
+@end enumerate
+
+@example
+/* 
+ * Style guide for the OpenBSD KNF (Kernel Normal Form). 
+ */ 
+ 
+/* 
+ * VERY important single-line comments look like this. 
+ */ 
+ 
+/* Most single-line comments look like this. */ 
+ 
+/* 
+ * Multi-line comments look like this.  Make them real sentences. 
+ * Fill them so they look like real paragraphs. 
+ */
+@end example
+
+Kernel include files (i.e., @code{<sys/*.h>}) come first; normally, you'll need
+@code{<sys/types.h>} OR @code{<sys/param.h>}, but not both! @code{<sys/types.h>} includes
+@code{<sys/cdefs.h>}, and it's okay to depend on that.
+
+@example
+#include <sys/types.h>	/* Non-local includes in brackets. */
+@end example
+
+If it's a network program, put the network include files next.
+
+@example
+#include <net/if.h> 
+#include <net/if_dl.h> 
+#include <net/route.h> 
+#include <netinet/in.h> 
+#include <protocols/rwhod.h>
+@end example
+
+Then there's a blank line, followed by the /usr/include files. The
+/usr/include files should be sorted!
+
+@example
+#include <stdio.h>
+@end example
+
+Global pathnames are defined in @code{/usr/include/paths.h}. Pathnames
+local to the program go in @code{pathnames.h} in the local directory.
+
+@example
+#include <paths.h>
+@end example
+
+Then there's a blank line, and the user include files.
+
+@example
+#include "pathnames.h"	/* Local includes in double quotes. */
+@end example
+
+All functions are prototyped somewhere.
+
+Function prototypes for private functions (i.e., functions not
+used elsewhere) go at the top of the first source module. In user
+land, functions local to one source module should be declared
+'@code{static}'.
+
+Functions that are used locally in more than one module go into a separate
+header file, e.g., @code{extern.h}.  Prototypes should not have variable names
+associated with the types; i.e.,
+
+@example
+void	function(int);
+@end example
+
+not:
+
+@example
+void	function(int a);
+@end example
+
+Prototypes may have an extra space after a tab to enable function names
+to line up:
+
+@example
+static char	*function(int, const char *); 
+static void	 usage(void);
+@end example
+
+There should be no space between the function name and the argument list.
+
+In header files, put function prototypes within @code{__BEGIN_DECLS} /
+@code{__END_DECLS} matching pairs. This makes the header file usable
+from C++.
+
+Macros are capitalized and parenthesized, and should avoid
+side-effects. If they are an inline expansion of a function, the
+function is defined all in lowercase; the macro has the same name
+all in uppercase. If the macro needs more than a single line, use
+braces. Right-justify the backslashes, as the resulting definition is
+easier to read. If the macro encapsulates a compound statement, enclose
+it in a @code{do} loop, so that it can safely be used in @code{if}
+statements. Any final statement-terminating semicolon should be supplied
+by the macro invocation rather than the macro, to make parsing easier
+for pretty-printers and editors.
+
+@verbatim
+#define	MACRO(x, y) do {					\ 
+	variable = (x) + (y);					\ 
+	(y) += 2;						\ 
+} while (0)
+@end verbatim
+
+Enumeration values are all uppercase.
+
+@verbatim
+enum enumtype { ONE, TWO } et;
+@end verbatim
+
+When defining unsigned integers use @code{unsigned int} rather than just
+@code{unsigned}; the latter has been a source of confusion in the past.
+
+When declaring variables in structures, declare them sorted by use,
+then by size (largest to smallest), then by alphabetical order. The first
+category normally doesn't apply, but there are exceptions. Each one gets
+its own line. Put a tab after the type, i.e., use @code{int^Ix;};
+and @code{structfoo^I*x;}.
+
+Major structures should be declared at the top of the file in which
+they are used, or in separate header files if they are used in multiple
+source files. Use of the structures should be by separate declarations
+and should be @code{extern} if they are declared in a header file.
+
+@verbatim
+struct foo { 
+	struct foo	*next;	/* List of active foo */ 
+	struct mumble	 amumble;	/* Comment for mumble */ 
+	int		 bar; 
+}; 
+struct foo *foohead;		/* Head of global foo list */
+@end verbatim
+
+Use queue(3) macros rather than rolling your own lists, whenever
+possible. Thus, the previous example would be better written:
+
+@verbatim
+#include <sys/queue.h> 
+struct	foo { 
+	LIST_ENTRY(foo)	link;		/* Queue macro glue for foo lists */ 
+	struct mumble	amumble;	/* Comment for mumble */ 
+	int		bar; 
+}; 
+LIST_HEAD(, foo) foohead;	/* Head of global foo list */
+@end verbatim
+
+Avoid using typedefs for structure types. This makes it impossible for
+applications to use pointers to such a structure opaquely, which is
+both possible and beneficial when using an ordinary struct tag. When
+convention requires a typedef, make its name match the struct tag. Avoid
+typedefs ending in "_t", except as specified in Standard C or by
+POSIX. Don't use the same name for a struct tag and a typedef, as this
+makes the code unusable from C++.
+
+@verbatim
+/* Make the structure name match the typedef. */ 
+typedef struct _bar { 
+	int	level; 
+} BAR;
+@end verbatim
+
+@verbatim
+/* 
+ * All major routines should have a comment briefly describing what 
+ * they do.  The comment before the "main" routine should describe 
+ * what the program does. 
+ */ 
+int 
+main(int argc, char *argv[]) 
+{ 
+	int aflag, bflag, ch, num; 
+	const char *errstr;
+@end verbatim
+
+For consistency, getopt(3) should be used to parse options. Options should
+be sorted in the getopt(3) call and the switch statement, unless parts of
+the switch cascade. Elements in a switch statement that cascade should
+have a FALLTHROUGH comment. Numerical arguments should be checked for
+accuracy. Code that cannot be reached should have a NOTREACHED comment.
+
+@verbatim
+while ((ch = getopt(argc, argv, "abn:")) != -1) 
+	switch (ch) {		/* Indent the switch. */ 
+	case 'a':		/* Don't indent the case. */ 
+		aflag = 1; 
+		/* FALLTHROUGH */ 
+	case 'b': 
+		bflag = 1; 
+		break; 
+	case 'n': 
+		num = strtonum(optarg, 0, INT_MAX, &errstr); 
+		if (errstr) { 
+			warnx("number is %s: %s", errstr, optarg); 
+			usage(); 
+		} 
+		break; 
+	default: 
+		usage(); 
+		/* NOTREACHED */ 
+	} 
+argc -= optind; 
+argv += optind;
+@end verbatim
+
+Use a space after keywords (@code{if}, @code{while}, @code{for},
+@code{return}, @code{switch}). Braces are always used for control
+statements, even those with zero or only a single statement.
+
+@verbatim
+for (p = buf; *p != '\0'; ++p) {
+	;	/* nothing */ 
+}
+for (;;) {
+	stmt; 
+}
+
+for (;;) { 
+	z = a + really + long + statement + that + needs + 
+	    two + lines + gets + indented + four + spaces + 
+	    on + the + second + and + subsequent + lines; 
+} 
+
+for (;;) { 
+	if (cond) {
+		stmt; 
+	}
+}
+@end verbatim
+
+Parts of a for loop may be left empty. Don't put declarations inside
+blocks unless the routine is unusually complicated.
+
+@verbatim
+for (; cnt < 15; cnt++) { 
+	stmt1; 
+	stmt2; 
+}
+@end verbatim
+
+Indentation is an 8 character tab. Second level indents are four
+spaces. All code should fit in 80 columns.
+
+@verbatim
+while (cnt < 20) {
+	z = a + really + long + statement + that + needs + 
+	    two + lines + gets + indented + four + spaces + 
+	    on + the + second + and + subsequent + lines;
+}
+@end verbatim
+
+Do not add whitespace at the end of a line, and only use tabs followed
+by spaces to form the indentation. Do not use more spaces than a tab
+will produce and do not use spaces in front of tabs.
+
+Closing and opening braces go on the same line as the else. 
+
+@verbatim
+if (test) {
+	stmt; 
+} else if (bar) { 
+	stmt; 
+	stmt; 
+} else {
+	stmt;
+}
+@end verbatim
+
+Do not use spaces after function names. Commas have a space after
+them. Do not use spaces after ‘(’ or ‘[’ or preceding ‘]’
+or ‘)’ characters.
+
+@verbatim
+if ((error = function(a1, a2))) {
+	exit(error);
+}
+@end verbatim
+
+Unary operators don't require spaces; binary operators do. Don't use
+parentheses unless they're required for precedence, the statement is
+confusing without them, or the compiler generates a warning without
+them. Remember that other people may be confused more easily than you. Do
+YOU understand the following?
+
+@verbatim
+a = b->c[0] + ~d == (e || f) || g && h ? i : j >> 1; 
+k = !(l & FLAGS);
+@end verbatim
+
+Exits should be 0 on success, or non-zero for errors. Where applicable,
+prefer @code{bool} for succeed-or-fail functions that do not set
+@code{errno}; use @code{true} to indicate success, and @code{false}
+to indicate failure.
+
+@verbatim
+exit(0);	/* 
+		 * Avoid obvious comments such as 
+		 * "Exit 0 on success." 
+		 */ 
+}
+@end verbatim
+
+The function type should be on a line by itself preceding the function.
+
+@verbatim
+static char * 
+function(int a1, int a2, float fl, int a4) 
+{
+@end verbatim
+
+When declaring variables in functions, declare them sorted by size
+(largest to smallest), then in alphabetical order. Each declaration
+should go on a separate line.
+
+Be careful not to obfuscate the code by initializing variables in the
+declarations. Use this feature only thoughtfully. DO NOT use function
+calls in initializers!
+
+@verbatim
+struct foo one, *two; 
+double three; 
+int *four, five; 
+char *six, seven, eight, nine, ten, eleven, twelve; 
+ 
+four = myfunction();
+@end verbatim
+
+Do not declare functions inside other functions.
+
+Casts and @code{sizeof()} calls are not followed by a space. Note that
+indent(1) does not understand this rule.
+
+Use of the @code{register} specifier is not permitted. Optimizing
+compilers such as gcc can generally do a better job of choosing which
+variables to place in registers to improve code performance. The
+exception to this is in functions containing assembly code where the
+@code{register} specifier is required for proper code generation in the
+absence of compiler optimization.
+
+Global flags set inside signal handlers should be of type 
+@code{volatile sig_atomic_t} if possible. This guarantees that the variable
+may be accessed as an atomic entity, even when a signal has been
+delivered. Global variables of other types (such as structures) are not
+guaranteed to have consistent values when accessed via a signal handler.
+
+@code{NULL} is the preferred null pointer constant. Use @code{NULL}
+instead of @code{(type *)0} or @code{(type *)NULL} in all cases except for
+arguments to variadic functions where the compiler does not know the type.
+
+Don't use @code{!} for tests unless it's a boolean, i.e., use
+
+@verbatim
+if (*p == '\0') {
+@end verbatim
+
+not
+
+@verbatim
+if (!*p) {
+@end verbatim
+
+Routines returning @code{void *} should not have their return values
+cast to any pointer type.
+
+Use err(3) or warn(3), don't roll your own!
+
+@verbatim
+	if ((four = malloc(sizeof(struct foo))) == NULL) {
+		err(1, NULL); 
+	}
+	
+	if ((six = (int *)overflow()) == NULL)  {
+		errx(1, "Number overflowed."); 
+	}
+	
+	return (eight); 
+}
+@end verbatim
+
+Use ANSI function declarations.
+
+Variable numbers of arguments should look like this:
+
+@verbatim
+#include <stdarg.h> 
+ 
+void 
+vaf(const char *fmt, ...) 
+{ 
+	va_list ap; 
+	va_start(ap, fmt); 
+ 
+	STUFF; 
+ 
+	va_end(ap); 
+ 
+	/* No return needed for void functions. */ 
+} 
+ 
+static void 
+usage(void) 
+{ 
+	extern char *__progname;	/* from crt0.o */
+@end verbatim
+
+Usage statements should take the same form as the synopsis in manual
+pages. Options without operands come first, in alphabetical order
+inside a single set of braces, followed by options with operands, in
+alphabetical order, each in braces, followed by required arguments in
+the order they are specified, followed by optional arguments in the
+order they are specified.
+
+A bar (@code{|}) separates either-or options/arguments, and multiple
+options/arguments which are specified together are placed in a single
+set of braces.
+
+If numbers are used as options, they should be placed first, as shown in
+the example below. Uppercase letters take precedence over lowercase. Note
+that the options list in manual pages should be purely alphabetical. That
+is, with no regard to whether an option takes an argument.
+
+@example
+"usage: f [-12aDde] [-b b_arg] [-m m_arg] req1 req2 [opt1 [opt2]]\n" 
+"usage: f [-a | -b] [-c [-de] [-n number]]\n"
+@end example
+
+The @code{__progname} string may be used instead of hard-coding the program name.
+
+@verbatim
+	(void)fprintf(stderr, "usage: %s [-ab]\n", __progname); 
+	exit(1); 
+}
+@end verbatim
+
+The following CFLAGS should be used:
+
+@verbatim
+CFLAGS=		-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Wcast-align
+CFLAGS+=	-Wwrite-strings -Wmissing-prototypes -Wmissing-declarations
+CFLAGS+=	-Wnested-externs -Winline -Wno-long-long -Wunused-variable
+CFLAGS+=	-Wstrict-prototypes -Werror
+@end verbatim
+
+All code @strong{must} compile with these flags.
+
+Assertions should be used to check all arguments entering a function.
+Additionally, a set of checks should be implemented in the case that
+@code{NODEBUG} is set that will return an error if the argument
+invariants are not met.
+
+@verbatim
+bool
+do_kex(struct schannel *sch, uint8_t *sk, uint8_t *pk, bool dialer)
+{
+	size_t	rpoff = 0; /* receive public offset */
+	size_t  spoff = 0; /* send public offset */
+	size_t	rsoff = 0; /* receive secret offset */
+	size_t	ssoff = 0; /* send secret offset */
+	int	rv = -1;
+
+	assert(NULL != sch);
+	assert(NULL != sk);
+	assert(NULL != pk);
+#ifdef NODEBUG
+	if ((NULL == sch) || (NULL == sk) || (NULL == pk)) {
+		return false;
+	}
+#endif
+@end verbatim
+
+@node The schannel Protocol
+@chapter The schannel Protocol
+
+The protocol consists of two stages: @dfn{key exchange} and
+@dfn{conversations}.
+
+@section Key Exchange
+
+A key exchange is 128 bytes, and consists of
+@math{key_1||key_2||signature}. If the @code{schannel_dial} or
+@code{schannel_listen} functions are provided a signature key, the
+signature will be computed as the signature over @math{key_1||key_2}.
+If no signature key is provided, the signature will be a zeroed
+32-byte value.
+
+The client uses @math{key_1} to derive its send key; the server uses
+this key as its receive key. Accordingly, @math{key_2} is used by the
+client as its receive key and by the server as its send key.
+
+@section Sending and Receiving Messages
+
+A message is sent over the secure channel by wrapping it in a message
+structure containing additonal information; this structure is detailed
+in the Data Structures chapter. This wrapped message is then encrypted
+for tranmsission. The message's length as a 32-bit unsigned integer in
+network order is transmitted first, followed by the ciphertext; the
+receiver will perform sanity checks on this number to make sure that
+the length is appropriate and that the proper amount of data is received.
+
+If the message is a normal message, the receiver will copy the payload
+into the appropriate buffer. If the message is a shutdown message, the
+receiver will zeroise the channel and close the socket. If the message
+is a key exchange message (indicating a key rotation), the receiver
+will perform the key exchange.
+
+@section Key Rotation
+
+In the case that one side determines that a key rotation is necessary,
+it will generate a new session keypair and send the public keys to its
+peer. The peer will generate a new session keypair, send its public
+keys to the other, and both sides compute the new shared keys. This key
+exchange is unauthenticated; it is assumed that the initial authentication
+is sufficient, and the new keys are sent over the secure channel (unlike
+the initial key exchange).
+
+@section Shutdown
+
+If one side initiates a shutdown, it sends a shutdown message to its peer,
+zeroises the shared keys, and closes the socket. When its peer receives
+this shutdown message, it zeroises its shared keys and closes the socket.
+
+
+@node Data Structures
+@chapter Data Structures
+
+@cindex data structures
+
+This chapter contains definitions and explanations of the data
+structures used by this library. These structures are not hidden
+behind typedefs, though only the @code{struct schannel} is exposed to
+users; it is expected that their fields will not be modified or
+accessed by users of this library. The @code{struct schannel} is
+passed into functions by the user, and the @code{struct schan_message}
+structure is used internally. 
+
+@section The @code{schannel} Structure
+
+The core type of this library is the @code{struct schannel} type. It
+is defined as
+
+@pindex struct schannel
+@verbatim
+struct schannel {
+	uint64_t	rdata;
+	uint64_t	sdata;
+
+	uint32_t	rctr;
+	uint32_t	sctr;
+
+	uint8_t		rkey[SCHANNEL_KEYSIZE];
+	uint8_t		skey[SCHANNEL_KEYSIZE];
+	uint8_t		buf[SCHANNEL_BUFSIZE];
+
+	int		sockfd;
+	bool		ready;
+	bool		kexip;
+};
+@end verbatim
+
+A @code{struct schannel} carries an overhead of 90 bytes plus the
+length of an integer on the platform; a structure then is 94 or 98 plus
+SCHANNEL_BUFSIZE bytes.
+
+The @code{rdata} and @code{sdata} fields contain the amount of data
+that has been received and sent, respectively. This is used to track
+when a key exchange should be performed to generate new keys.
+
+The @code{rctr} and @code{sctr} fields are the current receive and
+sent counters. These are used to ensure messages are not received out
+of sequence and to prevent replay attacks.
+
+The @code{rkey} and @code{skey} fields contain the shared key used by
+both sides for receiving and sending data. The first Curve25519 key in
+the pair is used to set up the key for messages from the client to the
+server, and the second key is used for messages from the server to the
+client.
+
+The @code{buf} field contains the message buffer. This is used to
+store incoming messages. Currently, @code{SCHANNEL_BUFSIZE} is 2MiB, or
+@code{2097152} bytes. Messages larger than this are not permitted,
+and will be rejected by the @code{schannel_send} function. This buffer
+is allocated on the stack for the sake of reliability and to avoid the
+use of dynamic memory allocation. Callers should be aware of this buffer
+size and ensure there is enough room on the stack for their data.
+
+The @code{sockfd} field contains the socket descriptor current
+associated with the channel. The @code{ready} field indicates whether
+the channel has been setup (true) or whether it is in an invalid state
+(false). The @code{kexip} field is set to true if a key exchange is
+in progress after the initial key exchange has occurred.
+
+This structure is not hidden behind a @code{typedef}, and it is expected
+that none of its fields will be modified or accessed by the user; however,
+the receive and send counters may be accessed to determine whether a key
+rotation is required. Modifying any of the fields will place the channel
+into an unknown state, and will jeopardize the security of the channel.
+
+@section The @code{schan_message} structure
+
+The @code{schan_message} structure is used internally to package
+messages for transmission and receiving. It is defined as
+
+@pindex struct schan_message
+@verbatim
+struct schan_message {
+	uint32_t	seqno;
+	uint32_t	payload_length;
+	uint8_t		mtype;
+	uint8_t		payload[SCHANNEL_BUFSIZE];
+};
+@end verbatim
+
+The @code{seqno} field contains the current message sequence number.
+
+The @code{payload_length} field contains the length of the payload.
+
+The @code{mtype} field is a flag indicating the type of message; the
+message type is returned by @code{schannel_recv}.
+
+@itemize
+
+@pindex SCHANNEL_NORMAL
+@item
+@code{SCHANNEL_NORMAL} (@code{1}) indicates a normal message that
+should be passed to the peer in the next @code{schannel_recv} call.
+
+@pindex SCHANNEL_KEX
+@item
+@code{SCHANNEL_KEX} (@code{2}) indicates that this message is a
+key exchange message. If the receiver has not sent its new public
+key, it must do so now. If it has sent its public key, it must
+recompute the send and receive keys. The @code{schannel_recv}
+automatically handles key exchanges, and therefore should never
+return this message type.
+
+@pindex SCHANNEL_SHUTDOWN
+@item
+@code{SCHANNEL_SHUTDOWN} (@code{3}) indicates that the peer is
+disconnecting. The receiver should call @code{schannel_zero} to
+sanitise the channel.
+
+@pindex SCHANNEL_INVALID_MESSAGE
+Any other message type is cause for an error, and returns the
+@code{SCHANNEL_INVALID_MESSAGE} (0) value.
+
+@end itemize
+
+@node Function Reference
+@chapter Function Reference
+
+@pindex schannel_init
+@example
+bool
+schannel_init(void)
+@end example
+
+This initialises the schannel library for use. It @strong{MUST} be
+called before using any of the functions below, @strong{MUST} not
+be used if it returns false, and @strong{MUST} be called before any
+concurrency.
+
+@pindex schannel_dial
+@example
+bool
+schannel_dial(struct schannel *sch, int sock, uint8_t *signer,
+	      size_t signer_len, uint8_t *peer, size_t peer_len)
+@end example
+
+@pindex schannel_listen
+@example
+bool
+schannel_listen(struct schannel *sch, int sock, uint8_t *signer,
+		size_t signer_len, uint8_t *peer, size_t peer_len)
+@end example
+
+@pindex SCHANNEL_IDKEYSIZE
+@pindex SCHANNEL_IDPKEYSIZE
+@pindex SCHANNEL_SIGSIZE
+
+These functions are used to initialise a new @code{schannel}. It returns
+@code{true} if the channel was properly established, and @code{false}
+on failure. The @code{sch} parameter must not be @code{NULL}, and
+the @code{sock} parameter must point to a valid socket descriptor. The
+@code{signer} paramter may be NULL (in which case @code{signerlen} should
+be @code{0}), or it should point to a buffer of @code{SCHANNEL_IDPKEYSIZE}
+bytes. Similarly, the @code{peer} may be null (and @code{peerlen} should
+be @code{0}), or it should point to a buffer of @code{SCHANNEL_IDKEYSIZE}
+(note the different constant from @code{signer}). The associated
+length paramters will be compared to the buffer, and the function will
+return false if the length is inappropriate. A non-null @code{signer}
+will cause the function to sign the key exchange; otherwise, a
+@code{SCHANNEL_SIGSIZE}-byte buffer of all zeroes will be sent. If
+@code{peer} is non-@code{NULL}, the signature will be verified.
+
+@pindex schannel_send
+@pindex SCHANNEL_BUFSIZE
+@example
+bool
+schannel_send(struct schannel *sch, uint8_t *buf, size_t buflen)
+@end example
+
+This function encrypts, authenticates, and sends the message contained
+in @code{buf} to the peer. The message must be less than
+@code{SCHANNEL_BUFSIZE} bytes. The function returns false if the message
+is too large or if an error occurred in transmission.
+
+@pindex schannel_recv
+@example
+uint8_t
+schannel_recv(struct schannel *sch, uint8_t *buf, size_t *buflen)
+@end example
+
+@pindex SCHANNEL_INVALID_MESSAGE
+@pindex SCHANNEL_KEX
+This function receives, authenticates, and decrypts the message. It
+returns the received message type (@pxref{Data Structures}), including
+@code{SCHANNEL_INVALID_MESSAGE} if the received message was invalid.
+If SCHANNEL_KEX is returned, it is for informational purposes only,
+and the caller does not need to do anything with the message. The
+buffer passed in will not contain any new data.
+
+@pindex schannel_close
+@example
+bool
+schannel_close(struct schannel *sch)
+@end example
+
+This function sends a shutdown message to the peer and calls the
+@code{schannel_zero} function to zeroise the channel.
+
+@pindex schannel_zero
+@example
+void
+schannel_zero(struct schannel *sch)
+@end example
+
+This function closes the channel socket and wipes the shared keys
+from memory.
+
+@page
+@pindex schannel_rekey
+@example
+bool
+schannel_rekey(struct schannel *sch)
+@end example
+
+This function triggers a rekeying. It returns true if the rekeying
+was successful, and false if an error occurred.
+
+@node schannel Tools
+@chapter schannel Tools
+
+@cindex schannel tools
+
+The library ships with two utility programs: @code{schannel_nc} and
+@code{schannel_keygen}.
+
+@section schannel_nc
+@pindex schannel_nc
+
+The @code{schannel_nc} program is a simple, netcat-like program that
+communicates using a secure channel.
+
+@example
+schannel_nc  [-hk] [-s signer] [-v verifier] host port
+schannel_nc [-hkl] [-s signer] [-v verifier] port
+        -h              print this usage message and exit
+        -k              force the program to keep listening after the
+                        client disconnects. This must be used with -l.
+        -l              listen for an incoming connection
+        -s signer       specify the path to a signature key
+        -v verifier     specify the path to a verification key
+@end example
+
+If a signature key is specified, it will be used to sign the key exchange. If a
+verification key is specified, it will be used to verify the signature on the
+key exchange. For example,
+
+@example
+schannel_nc -l -s server.key 4141
+@end example
+
+will set up a listener on port 4141, and it will sign the key exchange using
+the key @code{server.key}. The client would be run as
+
+@example
+echo "do not go gentle into that good night" | \
+	 schannel_nc -v server.pub 127.0.0.1 4141
+@end example
+
+In this case, the client will use the server's public key from
+@code{server.pub} to verify the key exchange.
+
+From the server's side, this would end up with the following output:
+
+@example
+$ ./schannel_nc -l -s server.key 4141
+secure channel established
+do not go gentle into that good night
+secure channel shutdown
+144 bytes read
+@end example
+
+The informational messages (and any errors) are printed to standard
+error so that standard output may be redirected elsewhere with the
+contents of the messages sent on the channel. The "bytes read"
+information accounts for message overhead. This overhead is fixed,
+and sending larger messages reduces the communications cost.
+
+From the client's side, this ends up as
+
+@example
+$ echo "do not go gentle into that good night" | \
+         schannel_nc -v server.pub 127.0.0.1 4141
+secure channel established
+.
+secure channel shutdown
+104 bytes written
+@end example
+
+A "." is printed for each chunk of data sent. In this case, only one
+chunk was sent, as the 37-byte message is far less than the buffer
+size.
+
+
+@section schannel_keygen
+@pindex schannel_keygen
+
+The @code{schannel_keygen} program is used to generate identity
+keypairs. These files are provided in binary format whose contents may
+be directly used by the functions in this library. The usage is
+
+@example
+schannel_keygen basename
+@end example
+
+This will output two files: @code{server.key}, containing the private key
+for signing the key exchange, and @code{server.pub}, containing the public
+key used to verify the key exchange. For example, to generate the server
+identity in the previous section:
+
+@example
+$ ./schannel_keygen server
+$ ls -l server.*
+-rw-rw-r-- 1 kyle kyle 64 Jan 31 04:12 server.key
+-rw-rw-r-- 1 kyle kyle 32 Jan 31 04:12 server.pub
+@end example
+
+@node Defines
+@chapter Defines
+
+The following symbols are defined in this library:
+
+@itemize
+
+@pindex SCHANNEL_BUFSIZE
+@item
+@code{SCHANNEL_BUFSIZE}: this defines the maximum size of messages that
+can be sent over the secure channel. If not defined at build time,
+it will be set to 2MiB (2097152 bytes).
+
+@pindex SCHANNEL_IDKEYSIZE
+@item
+@code{SCHANNEL_IDKEYSIZE}: this is the size of an identity public key.
+
+@pindex SCHANNEL_IDPKEYSIZE
+@item
+@code{SCHANNEL_IDPKEYSIZE}: this is the size of an identity private key.
+
+@pindex SCHANNEL_INVALID_MESSAGE
+@item
+@code{SCHANNEL_INVALID_MESSAGE}: this is the message type used for
+any message that is invalid or failed decryption. It is defined as 0.
+
+@pindex SCHANNEL_KEX
+@item
+@code{SCHANNEL_KEX}: this is the message type used for a key exchange
+message. It is current defined as 2.
+
+@pindex SCHANNEL_KEYSIZE
+@item
+@code{SCHANNEL_KEYSIZE}: this is the size of a shared key. It is currently
+32 bytes, the length of a NaCl secretbox key.
+
+@pindex SCHANNEL_NORMAL
+@item
+@code{SCHANNEL_NORMAL}: this is the message type used for normal
+traffic. It is currently defined as 1.
+
+@pindex SCHANNEL_OVERHEAD
+@item
+@code{SCHANNEL_OVERHEAD}: this defines the amount of extra data added
+to a message after encryption; this is the size of the nonce, the
+size of the message authentication code, and the size of the message
+envelope. The current overhead is 106 bytes.
+
+@pindex SCHANNEL_SHUTDOWN
+@item
+@code{SCHANNEL_SHUTDOWN}: this is the message type used for a shutdown
+message. It is defined as 3.
+
+@end itemize
+
+@node Manual Copyright
+@appendix Manual Copyright
+
+This document is released into the public domain.
+
+@node Index
+@unnumbered Index
+
+@printindex cp
+
+@bye

@@ -1,0 +1,61 @@
+.Dd February 2, 2015
+.Dt schannel_rekey 3
+.Os
+.Sh NAME
+.Nm schannel_rekey
+.Nd initiate a secure channel key rotation 
+.Sh SYNOPSIS
+.In schannel/schannel.h
+.Ft bool
+.Fo schannel_rekey
+.Fa "struct schannel *sch"
+.Fc
+Link with
+.Ic -lsodium -lschannel .
+.Sh DESCRIPTION
+.Nm
+triggers a key rotation on the secure channel.
+.Sh RETURN VALUES
+If successful,
+.Nm
+returns true. Otherwise, it returns false. A failed key rotation may
+leave both sides unable to communicate; in the case of failure, it may
+be prudent to shut down the channel and establish a new one.
+.Sh ERRORS
+.Nm
+may fail if
+.Bl -bullet -width .Ds
+.It
+The secure channel structure is NULL or a secure channel has not been
+established
+.It
+Memory for the new private key could not be locked, or the new private
+key could not be generated
+.It
+The key exchange message could not be sent or received from the socket
+.It
+An invalid key exchange message was received from the secure channel
+.It
+The key exchange computation failed
+.El
+.Sh SEE ALSO
+.Xr libschannel 3 ,
+.Xr schannel_init 3 ,
+.Xr schannel_dial 3 ,
+.Xr schannel_listen 3 ,
+.Xr schannel_send 3 ,
+.Xr schannel_recv 3 ,
+.Xr schannel_close 3 ,
+.Xr schannel_zero 3 ,
+.Xr schannel_rekey 3 
+.Sh STANDARDS
+.Nm
+is written in C99, and follows the NASA 10 guidelines for more reliable
+programs.
+.Sh AUTHORS
+.Nm
+was written by
+.An Kyle Isom Aq Mt kyle@tyrfingr.is .
+.Sh CAVEATS
+.Sh BUGS
+Please report all bugs to the author.

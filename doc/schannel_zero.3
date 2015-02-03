@@ -1,0 +1,30 @@
+.Dd February 2, 2015
+.Dt schannel_zero 3
+.Os
+.Sh NAME
+.Nm schannel_zero
+.Nd zeroise a secure channel
+.Sh SYNOPSIS
+.In schannel/schannel.h
+.Ft void
+.Fo schannel_zero
+.Fa "struct schannel *sch"
+.Fc
+Link with
+.Ic -lsodium -lschannel .
+.Sh DESCRIPTION
+.Nm
+wipes the shared keys from the secure channel, unlocks the memory
+associated with those keys, and closes the socket as required. It
+is safe to call
+.Nm
+multiple times.
+.Sh SEE ALSO
+.Xr libschannel 3 ,
+.Xr schannel_close 3 ,
+.Xr schannel_dial 3 ,
+.Xr schannel_init 3 ,
+.Xr schannel_listen 3 ,
+.Xr schannel_recv 3 ,
+.Xr schannel_rekey 3 ,
+.Xr schannel_send 3

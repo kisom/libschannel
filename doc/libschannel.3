@@ -1,0 +1,58 @@
+.Dd February 2, 2015
+.Dt LIBSCHANNEL 3 
+.Os
+.Sh NAME
+.Nm libschannel
+.Nd bidirectional secure channels over TCP/IP
+.Sh SYNOPSIS
+.In schannel/schannel.h
+.Ic -lschannel -lsodium
+.Sh DESCRIPTION
+.Nm
+sets up bidirectional secure channels over TCP/IP sockets. The
+caller is expected to have established the connection via either
+.Xr connect 2
+or
+.Xr accept 2 .
+It is built on top of
+.Lk https://github.com/jedsict1/libsodium libsodium
+which must be linked into programs in order to use this library.
+It uses Curve25519 to perform a Diffie-Hellman key exchange; these
+key exchanges may optionally be signed using Ed25519 keys.
+.Sh SECURITY
+.Nm
+takes precautions to zeroise sensitive data that is no longer in use;
+however, this is subject to the reliability of the operating system
+and machine in use. It will also attempt to lock memory containing
+sensitive data. However, the library's primary goal is to provide
+confidentiality, integrity, and authenticity for messages traveling
+between two peers. The host machines will need to provide additional
+security, e.g. protecting the identity keys. The library will also
+protect against replay attacks by automatically including sequence
+numbers, version information, and message type information in the
+messages that are sent.
+.Sh SEE ALSO
+.Xr schannel_init 3 ,
+.Xr schannel_dial 3 ,
+.Xr schannel_listen 3 ,
+.Xr schannel_send 3 ,
+.Xr schannel_recv 3 ,
+.Xr schannel_close 3 ,
+.Xr schannel_zero 3 ,
+.Xr schannel_rekey 3 
+.Sh STANDARDS
+.Nm
+is written in C99, and follows the NASA 10 guidelines for more reliable
+programs.
+.\" .Sh HISTORY
+.Sh AUTHORS
+.Nm
+was written by
+.An Kyle Isom Aq Mt kyle@tyrfingr.is .
+.Sh CAVEATS
+The library is typically built with a large buffer size; all operations
+occur on the stack and this buffer size may be too large for some
+systems to handle. In this case, it should be built with a smaller
+SCHAN_BUFSIZE definition.
+.Sh BUGS
+Please report all bugs to the author.

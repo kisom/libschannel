@@ -1,0 +1,129 @@
+.Dd February 2, 2015
+.Dt schannel_recv 3
+.Os
+.Sh NAME
+.Nm schannel_recv
+.Nd one line about what it does
+.Sh SYNOPSIS
+.In schannel/schannel.h
+.Ft uint8_t
+.Fo schannel_recv
+.Fa "struct schannel *sch"
+.Fa "uint8_t *buf"
+.Fa "size_t *buflen"
+.Fc
+Link with
+.Ic -lsodium -lschannel .
+.Sh DESCRIPTION
+.Nm
+receives a new message over the secure channel, authenticating and
+decrypting it. If the message was successfully recovered, the type of
+message will be returned; in the case of a normal message, the contents
+of the message will be in
+.Ic buf
+and
+.Ic buflen
+will contain the actual length of the message.
+.Pp
+.Sy NOTE :
+The
+.Ic buflen
+pointer must contain the maximum size of the buffer.
+.Nm
+will not allocate memory for the message, and needs to now how much
+space is available.
+.Sh RETURN VALUES
+The return value of
+.Nm
+indicates the type of message returned. The valid types are
+.Bl -tag -width .Ds
+.It SCHANNEL_INVALID_MESSAGE
+The message is invalid; the receive operation has failed.
+.It SCHANNEL_NORMAL
+The message is a normal message. The caller may process the message
+as necessary.
+.It SCHANNEL_KEX
+A key exchange has occurred; the caller does not need to do anything.
+This is provided for informational purposes. 
+.It SCHANNEL_SHUTDOWN
+The other side has shutdown communications; they will be not sending
+any further messages and they cannot receive new messages.
+.El
+.Sh EXAMPLES
+.Bd -literal
+int
+receive_message(struct schannel *sch)
+{
+	uint8_t		buf[BUFLEN];
+	size_t		buflen = BUFLEN;
+	uint8_t		mtype;
+
+	mtype = schannel_recv(sch, buf, &buflen);
+	switch (mtype) {
+	case SCHANNEL_INVALID_MESSAGE:
+		return -1;
+	case SCHANNEL_KEX:
+		syslog(LOG_USER|LOG_INFO, "session keys rotated");
+		break;
+	case SCHANNEL_NORMAL:
+		return process_message(buf, buflen);
+	case SCHANNEL_SHUTDOWN:
+		syslog(LOG_USER|LOG_INFO, "session shutdown");
+		schannel_close(sch);
+		/*
+		 * The caller can query the sch->ready field to
+		 * determine whether the secure channel was
+		 * shutdown.
+		 */
+		break;
+	}
+
+	return 0;
+}
+.Ed
+.Sh ERRORS
+.Nm
+may fail if
+.Bl -bullet -width .Ds
+.It
+The secure channel structure, buffer, or pointer to the length argument
+are NULL
+.It
+The message could not be read from the socket
+.It
+The message length is invalid; whether too small to have come from a
+secure channel, larger than the schannel maximum buffer size, or larger
+than the advertised length of the buffer parameter
+.It
+The message could not be decrypted
+.It
+The message's sequence number is invalid
+.It
+The message type is invalid
+.El
+In the case that a key exchange is in progress (i.e. initiated by
+.Xr schannel_rekey 3 ),
+the following errors may also occur:
+.Bl -bullet -width .Ds
+.It
+A key exchange is in progress, and the received message is not a
+key exchange message
+.It The received key exchange message has the wrong length for a
+public key pair.
+.It
+A new private key pair could not be generated, or the memory for the
+private key could not be locked
+.It
+The new key pair could not be sent to the peer
+.It
+The key exchange computation failed
+.El
+.Sh SEE ALSO
+.Xr libschannel 3 ,
+.Xr schannel_close 3 ,
+.Xr schannel_dial 3 ,
+.Xr schannel_init 3 ,
+.Xr schannel_listen 3 ,
+.Xr schannel_rekey 3 ,
+.Xr schannel_send 3 ,
+.Xr schannel_zero 3

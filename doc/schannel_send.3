@@ -1,0 +1,65 @@
+.Dd February 2, 2015
+.Dt schannel_send 3
+.Os
+.Sh NAME
+.Nm schannel_send
+.Nd send a message over the secure channel
+.Sh SYNOPSIS
+.In schannel/schannel.h
+.Ft bool
+.Fo schannel_send
+.Fa "struct schannel *sch"
+.Fa "uint8_t *buf"
+.Fa "size_t buflen"
+.Fc
+Link with
+.Ic -lsodium -lschannel .
+.Sh DESCRIPTION
+.Nm
+is used to send normal messages over the secure channel. These messages
+are intended to be processed by the client, as opposed to the special
+messages for initiating key exchanges or shutting down the channel.
+.Nm
+(and the corresponding
+.Xr schannel_recv 3
+function) will transparently handle adding sequence numbers, version
+information, and message types; they will also verify that message
+numbers do not regress and that the message type and size meet certain
+requirements.
+.Sh RETURN VALUES
+.Nm
+returns true if the message was successfully sent, and false if the
+message could not be sent.
+.Sh ERRORS
+.Nm
+may fail if
+.Bl -bullet -width .Ds
+.It
+The buffer has a length of 0
+.It
+The buffer is too large to be sent
+.It
+The message could not be encrypted
+.It
+The message could not be sent over the socket
+.El
+.Sh SEE ALSO
+.Xr libschannel 3 ,
+.Xr schannel_close 3 ,
+.Xr schannel_dial 3 ,
+.Xr schannel_init 3 ,
+.Xr schannel_listen 3 ,
+.Xr schannel_recv 3 ,
+.Xr schannel_rekey 3 ,
+.Xr schannel_zero 3
+.Sh STANDARDS
+.Nm
+is written in C99, and follows the NASA 10 guidelines for more reliable
+programs.
+.Sh AUTHORS
+.Nm
+was written by
+.An Kyle Isom Aq Mt kyle@tyrfingr.is .
+.Sh CAVEATS
+.Sh BUGS
+Please report all bugs to the author.

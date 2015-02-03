@@ -1,0 +1,49 @@
+.Dd February 2, 2015
+.Dt schannel_close 3
+.Os
+.Sh NAME
+.Nm schannel_close
+.Nd shutdown the secure channel
+.Sh SYNOPSIS
+.In schannel/schannel.h
+.Ft bool
+.Fo schannel_close
+.Fa "struct schannel *sch"
+.Fc
+Link with
+.Ic -lsodium -lschannel .
+.Sh DESCRIPTION
+.Nm
+sends a shutdown message to its peer, and calls
+.Xr schannel_zero 3
+to zeroise the secure channel structure. The secure channel
+must have been established using either
+.Xr schannel_dial 3
+or
+.Xr schannel_listen 3 .
+.Sh RETURN VALUES
+.Nm
+returns true if the message was sent successfully, and false if an error
+occurred. If the error was due to an inability to transmit the shutdown
+message, the secure channel will still be zeroised.
+.Sh ERRORS
+.Nm
+may fail if
+.Bl -bullet -width .Ds
+.It
+The secure channel structure is NULL
+.It
+The secure channel has not been established
+.It
+The shutdown message could not be sent
+.Ed
+.Sh SEE ALSO
+.Xr libschannel 3 ,
+.Xr schannel_dial 3 ,
+.Xr schannel_init 3 ,
+.Xr schannel_listen 3 ,
+.Xr schannel_recv 3 ,
+.Xr schannel_rekey 3 ,
+.Xr schannel_send 3 ,
+.Xr schannel_zero 3
+.Sh CAVEATS

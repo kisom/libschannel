@@ -1,0 +1,39 @@
+.Dd February 2, 2015
+.Dt schannel_init 3
+.Os
+.Sh NAME
+.Nm schannel_init
+.Nd initialise libschannel for use
+.Sh SYNOPSIS
+.In schannel/schannel.h
+.Ft bool
+.Fo schannel_init
+.Fa void
+.Fc
+Link with
+.Ic -lsodium -lschannel .
+.Sh DESCRIPTION
+.Nm
+initialises the library for use. It
+.Sy must
+be
+.Bl -tag bullet -width .Ds
+.It
+called before using any of other functions in the library
+.It
+not be used if it returns false
+.It
+must be called before any concurrency
+.El
+.Sh RETURN VALUES
+If the library was initialised and is ready for use, this function
+will return true. Otherwise, it returns false.
+.Sh SEE ALSO
+.Xr libschannel 3 ,
+.Xr schannel_close 3 ,
+.Xr schannel_dial 3 ,
+.Xr schannel_listen 3 ,
+.Xr schannel_recv 3 ,
+.Xr schannel_rekey 3 ,
+.Xr schannel_send 3 ,
+.Xr schannel_zero 3
