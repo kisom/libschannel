@@ -22,15 +22,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <sodium.h>
+
+
+static void	usage(void);
+static bool	write_file(const char *, uint8_t *, size_t);
 
 
 /*
  * usage prints an informational message describing the usage of this
  * program.
  */
-static void
+void
 usage(void)
 {
 	fprintf(stderr, "schannel_keygen version %s\n", VERSION);
@@ -50,7 +55,7 @@ usage(void)
  * false if the file couldn't be opened for writing or if a short write
  * occurred.
  */
-static bool
+bool
 write_file(const char *path, uint8_t *buf, size_t buflen)
 {
 	FILE	*file = NULL;
@@ -65,7 +70,9 @@ write_file(const char *path, uint8_t *buf, size_t buflen)
 		ok = true;	
 	}
 
-	fclose(file);
+	if (-1 == fclose(file)) {
+		return false;
+	}
 	return ok;
 }
 
@@ -80,8 +87,25 @@ main(int argc, char *argv[])
 	uint8_t		filename[PATH_MAX+1];
 	uint8_t		private[crypto_sign_SECRETKEYBYTES];
 	uint8_t		public[crypto_sign_PUBLICKEYBYTES];
+	int		opt;
 
-	if (argc != 2) {
+	while ((opt = getopt(argc, argv, "h")) != -1) {
+		switch (opt) {
+		case 'h':
+			usage();
+			exit(EXIT_SUCCESS);
+		default:
+			/* NOT REACHED */
+			usage();
+			exit(EXIT_FAILURE);
+		}
+	}
+
+	argc -= optind;
+	argv += optind;
+
+
+	if (argc != 1) {
 		usage();
 		exit(EXIT_FAILURE);
 	}
@@ -91,7 +115,7 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	if (-1 == snprintf((char *)filename, PATH_MAX+1, "%s.key", argv[1])) {
+	if (-1 == snprintf((char *)filename, PATH_MAX+1, "%s.key", argv[0])) {
 		sodium_memzero(private, crypto_sign_SECRETKEYBYTES);
 		err(EXIT_FAILURE, "failed to create pathname");
 	}
@@ -103,7 +127,7 @@ main(int argc, char *argv[])
 
 	sodium_memzero(private, crypto_sign_SECRETKEYBYTES);
 
-	if (-1 == snprintf((char *)filename, PATH_MAX+1, "%s.pub", argv[1])) {
+	if (-1 == snprintf((char *)filename, PATH_MAX+1, "%s.pub", argv[0])) {
 		err(EXIT_FAILURE, "failed to create pathname");
 	}
 
