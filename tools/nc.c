@@ -373,8 +373,6 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	printf("overhead: %lu\n", (size_t)SCHANNEL_OVERHEAD);
-
 	reqd -= listen;
 	if (argc != reqd) {
 		errx(EXIT_FAILURE, "Need %d arguments.", reqd);

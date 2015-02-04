@@ -278,6 +278,14 @@ principles of this program. It may be summarised as a combination of
 minor modifications to the OpenBSD @verb{|style(9)|} guidelines with
 the NASA guidelines for reliable code.
 
+There is a restriction on complexity: functions should have a
+maximum cyclomatic complexity of 15; a modified complexity is used
+in which @code{switch} statements are counted instead of @code{case}
+statements. This has proven to be more useful in determining the costs
+of maintenance and overall code complexity. The goal of this is to
+reduce function size and limit the amount of work needed to analyze
+a single function.
+
 @section NASA's Guidelines for Reliable Code
 @noindent
 The NASA rules are:
@@ -976,6 +984,8 @@ struct schan_message {
 	uint8_t		payload[SCHANNEL_BUFSIZE];
 };
 @end verbatim
+
+This structure adds 12 bytes of overhead to every message being sent.
 
 The @code{version} field contains the message format number; this is
 current at version 1.

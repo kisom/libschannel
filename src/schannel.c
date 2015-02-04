@@ -64,6 +64,7 @@ static bool	do_kex(struct schannel *, uint8_t *, uint8_t *, bool);
 static bool	_schannel_send(struct schannel *, uint8_t, uint8_t *, size_t);
 static bool	unpack_message(struct schannel *, struct schan_message *,
 			       uint32_t);
+static bool	size_is_valid(uint32_t, size_t);
 static bool	schannel_recv_kex(struct schannel *, struct schan_message *);
 
 
@@ -414,7 +415,8 @@ schannel_dial(struct schannel *sch, int sock, uint8_t *signer,
 /*
  * schannel_listen sets up a key exchange with the remote host. This function
  * is called by some server listening on a TCP port. The same conditions that
- * apply to schannel_dial apply here.
+ * apply to schannel_dial apply here. The extra length in this function is
+ * due to the need to ensure locked memory is properly unlocked on failure.
  */
 bool
 schannel_listen(struct schannel *sch, int sock, uint8_t *signer,
@@ -664,6 +666,27 @@ schannel_recv_kex(struct schannel *sch, struct schan_message *m)
 
 
 /*
+ * size_is_valid performs sanity checks on the message length, ensuring
+ * the message will contain a packed message, isn't larger than the
+ * maximum message size, and the buffer provided has storage space for
+ * the decrypted and unpacked message.
+ */
+bool
+size_is_valid(uint32_t mlen, size_t buflen)
+{
+	if (mlen <= SCHANNEL_OVERHEAD) {
+		return SCHANNEL_INVALID_MESSAGE;
+	} else if (mlen >= (SCHANNEL_BUFSIZE+SCHANNEL_OVERHEAD)) {
+		return SCHANNEL_INVALID_MESSAGE;
+	} else if (mlen > (buflen+SCHANNEL_OVERHEAD)) {
+		return SCHANNEL_INVALID_MESSAGE;
+	}
+
+	return true;
+}
+
+
+/*
  * schannel_recv receives a new message from the network. The message
  * is authenticated, decrypted, and its sequence number is checked.
  * The function will return one of SCHANNEL_NORMAL or SCHANNEL_SHUTDOWN
@@ -692,11 +715,7 @@ schannel_recv(struct schannel *sch, uint8_t *buf, size_t *buflen)
 	}
 
 	mlen = ntohl(mlen);	
-	if (mlen <= SCHANNEL_OVERHEAD) {
-		return SCHANNEL_INVALID_MESSAGE;
-	} else if (mlen >= (SCHANNEL_BUFSIZE+SCHANNEL_OVERHEAD)) {
-		return SCHANNEL_INVALID_MESSAGE;
-	} else if (mlen > ((*buflen)+SCHANNEL_OVERHEAD)) {
+	if (!size_is_valid(mlen, *buflen)) {
 		return SCHANNEL_INVALID_MESSAGE;
 	}
 

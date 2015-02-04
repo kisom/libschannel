@@ -1,6 +1,6 @@
 AC_PREREQ([2.59])
 AC_INIT([libschannel],
-        [1.0], 
+        [1.0.1], 
         [kyle@tyrfingr.is],
         [libschannel],
         [])
