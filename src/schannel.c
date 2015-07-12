@@ -188,7 +188,7 @@ initialise_schannel(struct schannel *sch)
 bool
 generate_keypair(uint8_t *sk, uint8_t *pk)
 {
-	int	rv = -1;
+	int	rv;
 
 	assert(NULL != sk);
 	assert(NULL != pk);
@@ -515,7 +515,7 @@ _schannel_send(struct schannel *sch, uint8_t mtype, uint8_t *buf, size_t buflen)
 {
 	struct schan_message	m;
 	uint32_t		mlen = 0;
-	int			rv = -1;
+	int			rv;
 
 	assert(buflen > 0);
 	assert(buflen <= SCHANNEL_BUFSIZE);
@@ -576,7 +576,7 @@ schannel_send(struct schannel *sch, uint8_t *buf, size_t buflen)
 bool
 unpack_message(struct schannel *sch, struct schan_message *m, uint32_t mlen)
 {
-	int	rv = -1;
+	int	rv;
 
 	assert(NULL != m);
 	assert(NULL != sch);
@@ -698,7 +698,7 @@ schannel_recv(struct schannel *sch, uint8_t *buf, size_t *buflen)
 {
 	struct schan_message	m;
 	uint32_t		mlen;
-	int			rv = -1;
+	int			rv;
 
 	assert(NULL != buf);
 	assert(NULL != buflen);
@@ -769,7 +769,7 @@ bool
 schannel_close(struct schannel *sch)
 {
 	uint8_t			buf[1];
-	bool			ok = false;
+	bool			ok;
 
 	assert(NULL != sch);
 	assert(sch->ready == true);
